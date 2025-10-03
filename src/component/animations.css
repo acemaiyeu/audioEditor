@@ -1,0 +1,109 @@
+/*
+ * File: animations.css
+ * Định nghĩa các hiệu ứng mới dựa trên yêu cầu
+ *
+ * NOTE: Bạn có thể cần điều chỉnh các giá trị (keyframes, duration)
+ * để đạt được hiệu ứng chính xác như trong hình mẫu.
+ */
+
+/* Hiệu ứng Fade In (Giữ lại từ trước) */
+.fade-in-text {
+    animation: fadeIn 1s ease-out forwards;
+    opacity: 0;
+}
+@keyframes fadeIn {
+    to { opacity: 1; }
+}
+
+/* 1. Hiệu ứng Throw Out (Ném ra, dịch chuyển và xoay) */
+.throw-out-text {
+    animation: throwOut 0.8s ease-in forwards;
+    transform: translateY(0) rotate(0);
+    opacity: 0;
+}
+@keyframes throwOut {
+    0% {
+        opacity: 1;
+        transform: translateY(0) rotate(0) scale(1);
+    }
+    100% {
+        opacity: 0;
+        transform: translateY(-200px) rotate(45deg) scale(0.5); /* Ném lên và xoay */
+    }
+}
+
+/* 2. Hiệu ứng Golden Dust (Tập trung & mờ dần/scale) */
+.golden-dust-text {
+    animation: goldenDust 1.5s ease-out forwards;
+    transform: scale(0.5);
+    opacity: 0;
+}
+@keyframes goldenDust {
+    0% {
+        opacity: 0;
+        transform: scale(0.5);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1.1); /* Hơi phình to */
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    /* Để mô phỏng bụi vàng, cần kết hợp với filter/text-shadow và pseudo-elements, 
+       nhưng ở đây chỉ dùng Keyframes cơ bản */
+}
+
+/* 3. Hiệu ứng Typewriter (Đánh máy) */
+/* Cần điều chỉnh animation-delay trong JSX để mô phỏng chính xác hiệu ứng từng chữ */
+.typing-text {
+    overflow: hidden; /* Ẩn chữ thừa */
+    white-space: nowrap; /* Giữ nguyên một dòng */
+    border-right: .15em solid orange; /* Con trỏ nhấp nháy */
+    animation: 
+        typing 3.5s steps(40, end),
+        blink-caret .75s step-end infinite;
+    width: 0; /* Bắt đầu với width = 0 */
+}
+@keyframes typing {
+    from { width: 0 }
+    to { width: 100% }
+}
+@keyframes blink-caret {
+    from, to { border-color: transparent }
+    50% { border-color: orange; }
+}
+
+/* 4. Hiệu ứng Wave In (Lượn sóng) */
+.wave-in-text {
+    animation: waveIn 1.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+    transform: translateY(100%);
+}
+@keyframes waveIn {
+    0% {
+        transform: translateY(100%);
+        opacity: 0;
+    }
+    100% {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+/* Thêm các hiệu ứng khác: Zoom In (giữ lại từ trước) */
+.zoom-in-text {
+    animation: zoomIn 1s ease-out forwards;
+    transform: scale(0.5);
+    opacity: 0;
+}
+@keyframes zoomIn {
+    0% {
+        transform: scale(0.5);
+        opacity: 0;
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
