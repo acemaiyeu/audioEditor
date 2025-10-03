@@ -1042,7 +1042,7 @@ class AudioEditor extends Component {
                         onClick={() => this.handleDeleteLyric(index)} 
                         style={{ marginLeft: '5px', padding: '5px 10px', backgroundColor: '#d9534f', color: 'white', border: 'none' }}
                     >
-                        🗑 Xóa
+                        🗑 Xóa 
                     </button>
                 </div>
               )}
