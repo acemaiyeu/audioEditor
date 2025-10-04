@@ -3,14 +3,11 @@ import WaveSurfer from "wavesurfer.js";
 import { motion, AnimatePresence } from "framer-motion"; 
 import Draggable from "react-draggable"; 
 import toast, { Toaster } from 'react-hot-toast'; 
-import "./animations.css"; 
-
-// ====================================================================
-// 🛠️ KHAI BÁO THƯ VIỆN THỰC TẾ 
-// ====================================================================
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver'; 
-// ====================================================================
+import axios from 'axios'; 
+import "./animations.css"; 
+import cssFileObject from './animations.css'
 
 
 class AudioEditor extends Component {
@@ -21,8 +18,15 @@ class AudioEditor extends Component {
       lyrics: [], 
       currentLyric: "",
       currentTime: 0,
+      
+      // File URLs (chỉ dùng cho Preview)
       videoFile: null,
       imageFile: null,
+      
+      // File Objects (dùng để gửi lên Server)
+      audioFileObject: null, 
+      backgroundFileObject: null, 
+      
       isPlaying: false,
       editingIndex: null, 
       editingText: "", 
@@ -34,8 +38,12 @@ class AudioEditor extends Component {
       globalFontSize: 28, 
       previewRatio: '16:9', 
       
-      // THÔNG TIN MỚI: Tên file Audio cho việc lưu Project
       audioFileName: "untitled_audio", 
+      
+      // CÁC STATE CHO POLLING/DOWNLOAD
+      isExporting: false,       
+      exportedFileName: null,   
+      pollingIntervalId: null,  
     };
     this.waveformRef = React.createRef();
     this.videoRef = React.createRef();
@@ -65,10 +73,13 @@ class AudioEditor extends Component {
         'bottom-right': { x: 940, y: 480 }, 
     };
   }
-
+  
   // ====================================================================
-  // LOGIC LƯU/TẢI DỰ ÁN (JSON) - ĐÃ CẬP NHẬT TÊN FILE
+  // 💾 LOGIC LƯU/TẢI DỰ ÁN (JSON) VÀ EXCEL
   // ====================================================================
+  // (Các hàm handleSaveProject, handleLoadProject, handleDownloadTemplate, 
+  // handleExportLyrics, exportDataToExcel, handleImportLyrics, processImport giữ nguyên)
+  
   handleSaveProject = () => {
       const { lyrics, globalFontFamily, globalFontSize, previewRatio, audioFileName } = this.state;
       
@@ -95,7 +106,6 @@ class AudioEditor extends Component {
       const jsonString = JSON.stringify(projectData, null, 2);
       const blob = new Blob([jsonString], { type: "application/json" });
       
-      // Cập nhật tên file: PJ_TênAudio.json
       const fileName = `PJ_${audioFileName.replace(/\.[^/.]+$/, "")}.json`;
       
       saveAs(blob, fileName);
@@ -119,12 +129,10 @@ class AudioEditor extends Component {
                   
                   const { globalSettings, lyrics } = projectData;
                   
-                  // Áp dụng Global Settings
                   const newGlobalFontFamily = String(globalSettings.globalFontFamily || this.state.globalFontFamily);
                   const newGlobalFontSize = parseInt(globalSettings.globalFontSize) || this.state.globalFontSize;
                   const newPreviewRatio = String(globalSettings.previewRatio || this.state.previewRatio);
                   
-                  // Áp dụng Lyrics (thêm lại nodeRef)
                   const newLyrics = lyrics.map(lyric => ({
                       ...lyric,
                       time: parseFloat(lyric.time) || 0,
@@ -155,89 +163,12 @@ class AudioEditor extends Component {
       }
       e.target.value = null;
   };
-
-  // ====================================================================
-  // LOGIC EXPORT VIDEO - MỚI
-  // ====================================================================
-  handleExportVideo = () => {
-      const { videoFile, imageFile, audioFileName } = this.state;
-      
-      if (this.state.lyrics.length === 0) {
-          toast.error("Không có lyrics để xuất video!");
-          return;
-      }
-
-      let backgroundSource = "";
-      if (videoFile) {
-          backgroundSource = "Video đã tải lên";
-      } else if (imageFile) {
-          backgroundSource = "Hình ảnh đã tải lên";
-      } else {
-          backgroundSource = "Nền Đen Mặc Định";
-      }
-      
-      // Mô phỏng quá trình tạo video (Trong ứng dụng thực tế,
-      // bước này sẽ gọi API hoặc sử dụng thư viện render video như FFmpeg)
-      
-      const fileName = `Video_${audioFileName.replace(/\.[^/.]+$/, "")}.mp4`;
-      
-      toast.promise(
-          new Promise(resolve => setTimeout(resolve, 3000)), // Mô phỏng 3 giây render
-          {
-              loading: `Đang xuất video... (Nền: ${backgroundSource})`,
-              success: <b>Xuất Video thành công! File: {fileName}</b>,
-              error: <b>Lỗi khi xuất video.</b>,
-          }
-      );
-  };
-
-
-  // ====================================================================
-  // HÀM XỬ LÝ UPLOAD - ĐÃ CẬP NHẬT TÊN FILE AUDIO
-  // ====================================================================
-
-  handleAudioUpload = (e) => {
-    const file = e.target.files[0];
-    if (file && this.state.wavesurfer) {
-      this.state.wavesurfer.load(URL.createObjectURL(file));
-      this.setState({ isPlaying: false, audioFileName: file.name }); // Cập nhật tên file
-      if (this.videoRef.current) {
-        this.videoRef.current.load();
-      }
-      toast.success(`Đã tải Audio thành công! Tên file: ${file.name}`);
-    }
-  };
-
-  // Các hàm khác (handleVideoUpload, handleImageUpload, handleExportLyrics, etc.)
-  // GIỮ NGUYÊN HOẶC CHỈ CẬP NHẬT CẤU TRÚC KHI CẦN.
-
-  handleVideoUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-        this.setState({ videoFile: URL.createObjectURL(file), imageFile: null });
-        toast.success("Đã tải Video thành công!");
-    }
-  };
-
-  handleImageUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-        this.setState({ imageFile: URL.createObjectURL(file), videoFile: null });
-        toast.success("Đã tải Image thành công!");
-    }
-  };
   
-  // ... (các hàm khác giữ nguyên)
-
-  // ====================================================================
-  // LOGIC IMPORT/EXPORT EXCEL (GIỮ NGUYÊN)
-  // ====================================================================
   handleDownloadTemplate = () => {
-    // CẬP NHẬT: Thêm đầy đủ các trường thông tin
     const templateData = [
       { 
         Time_Start_Sec: 0.5, 
-        Duration_Sec: 4.5, // DURATION MẶC ĐỊNH
+        Duration_Sec: 4.5, 
         Text: "Đây là dòng lyric mẫu\nCó thể xuống dòng", 
         Animation: "fade-in-basic", 
         Font_Size_Px: 28,
@@ -254,7 +185,6 @@ class AudioEditor extends Component {
       toast.error("Không có dữ liệu lyric để xuất! Vui lòng nhấn 'Tải Mẫu' để lấy cấu trúc.");
       return;
     }
-    // CẬP NHẬT: Lấy đầy đủ các trường từ state để xuất
     const exportData = this.state.lyrics.map(lyric => ({
       Time_Start_Sec: lyric.time.toFixed(2),
       Duration_Sec: lyric.duration.toFixed(1),
@@ -316,7 +246,6 @@ class AudioEditor extends Component {
                 return;
             }
             
-            // Xử lý confirm ghi đè bằng Toast
             if (this.state.lyrics.length > 0) {
                 toast((t) => (
                     <div
@@ -362,7 +291,6 @@ class AudioEditor extends Component {
   };
 
   processImport = (structuredJson) => {
-      // Khi Import Excel, chúng ta chỉ cập nhật lyrics, giữ nguyên Global Settings
       const newLyrics = structuredJson.map((row, index) => {
           const defaultPos = this.positionPresets['top-mid'];
           
@@ -392,50 +320,217 @@ class AudioEditor extends Component {
       toast.success(`Đã nhập thành công ${newLyrics.length} dòng lyrics và cập nhật đầy đủ thuộc tính!`);
   }
   
-  // ... (các hàm xử lý khác giữ nguyên)
+  // ====================================================================
+  // 🎬 LOGIC EXPORT VIDEO (AXIOS & POLLING)
+  // ====================================================================
 
-  applyPresetPosition = (index, presetKey) => {
-    const preset = this.positionPresets[presetKey] || this.positionPresets['default'];
-    const lyrics = [...this.state.lyrics];
+  /**
+   * Bắt đầu quá trình polling (hỏi) trạng thái xử lý của video từ server.
+   */
+  startPolling = (fileName) => {
+    const API_STATUS_URL = `http://localhost:8888/api/export-status/${fileName}`;
+
+    const checkStatus = async () => {
+        try {
+            const response = await axios.get(API_STATUS_URL);
+            
+            if (response.data.is_ready) {
+                // 1. Dừng Polling
+                clearInterval(this.state.pollingIntervalId);
+                
+                // 2. Cập nhật UI và thông báo
+                this.setState({ isExporting: false, exportedFileName: fileName, pollingIntervalId: null });
+                toast.success(
+                    <b style={{ color: '#007bff' }}>✅ Video "{fileName}" đã được xử lý xong! Nhấn nút Tải Xuống.</b>, 
+                    { duration: 10000 }
+                );
+                
+            } else {
+                // Video chưa xong, tiếp tục đợi
+                console.log(`[Polling] Video đang xử lý...`);
+            }
+
+        } catch (error) {
+            // Xử lý lỗi (ví dụ: file không tồn tại, Job thất bại)
+            clearInterval(this.state.pollingIntervalId);
+            this.setState({ isExporting: false, exportedFileName: null, pollingIntervalId: null });
+            
+            let message = "Lỗi khi kiểm tra trạng thái video.";
+            if (error.response && error.response.status === 404) {
+                message = `Tác vụ xử lý video không tìm thấy hoặc đã bị hủy.`;
+            }
+            toast.error(message, { duration: 8000 });
+            console.error("Polling Error:", error);
+        }
+    };
+
+    // Bắt đầu interval
+    const intervalId = setInterval(checkStatus, 5000); // Poll mỗi 5 giây
+    this.setState({ pollingIntervalId: intervalId });
     
-    const currentResolution = this.resolutionPresets[this.state.previewRatio];
-    let newX = preset.x;
-    if (presetKey.includes('right')) {
-        newX = currentResolution.width - 20; 
+    // Chạy lần đầu tiên ngay lập tức
+    checkStatus(); 
+  };
+
+
+  handleExportVideo = () => {
+    const { 
+        lyrics, 
+        audioFileObject, 
+        backgroundFileObject, 
+        globalFontFamily, 
+        globalFontSize, 
+        previewRatio 
+    } = this.state;
+    
+    // 1. Kiểm tra điều kiện cần thiết
+    if (!audioFileObject) {
+        toast.error("Vui lòng tải file Audio (.mp3, .wav) lên trước.");
+        return;
+    }
+    if (lyrics.length === 0) {
+        toast.error("Vui lòng thêm ít nhất một dòng lyrics.");
+        return;
+    }
+
+    // 2. Chuẩn bị FormData
+    const formData = new FormData();
+    formData.append('audio_file', audioFileObject);
+    if (backgroundFileObject) {
+        formData.append('background_file', backgroundFileObject); 
     }
     
-    lyrics[index].x = newX;
-    lyrics[index].y = preset.y;
-    this.setState({ lyrics });
-  };
-  
-  handleRatioChange = (e) => {
-    const newRatio = e.target.value;
-    const currentResolution = this.resolutionPresets[newRatio];
+    const lyricsToSave = lyrics.map(({ nodeRef, ...rest }) => rest);
+    formData.append('lyrics', JSON.stringify(lyricsToSave));
     
-    const updatedPresets = { ...this.positionPresets };
-    Object.keys(updatedPresets).forEach(key => {
-        if (key.includes('right')) {
-            updatedPresets[key].x = currentResolution.width - 20;
+    const globalSettings = {
+        globalFontFamily,
+        globalFontSize,
+        previewRatio: this.resolutionPresets[previewRatio], 
+    };
+    formData.append('global_settings', JSON.stringify(globalSettings));
+
+    // 🧩 Thêm CSS file
+formData.append('css_file', cssFileObject); 
+
+    // 3. Gửi Request API bằng Axios
+    const API_URL = 'http://localhost:8888/api/export-video'; 
+    
+    const exportPromise = new Promise(async (resolve, reject) => {
+        try {
+            const response = await axios.post(API_URL, formData);
+            
+            const data = response.data;
+
+            if (data.job_dispatched) {
+                // BẮT ĐẦU QUÁ TRÌNH POLLING
+                this.setState({ 
+                    isExporting: true, 
+                    exportedFileName: data.file_name 
+                });
+                
+                this.startPolling(data.file_name);
+                
+                resolve(`Yêu cầu xuất video (${data.file_name}) đã được gửi thành công! Bắt đầu kiểm tra trạng thái...`);
+            } else {
+                reject(new Error('Server phản hồi OK nhưng không xác nhận việc đẩy Job vào Queue.'));
+            }
+
+        } catch (error) {
+            let errorMessage = 'Lỗi không xác định khi gửi yêu cầu.';
+            
+            if (error.response) {
+                const status = error.response.status;
+                const errorData = error.response.data;
+
+                if (status === 422 && errorData.errors) {
+                    const validationErrors = Object.values(errorData.errors).flat();
+                    errorMessage = `Lỗi Validation: ${validationErrors.join(', ')}`;
+                } else if (errorData.message) {
+                    errorMessage = errorData.message;
+                } else {
+                    errorMessage = `Lỗi Server (HTTP ${status}): ${error.response.statusText}`;
+                }
+
+            } else if (error.request) {
+                errorMessage = 'Lỗi mạng: Không thể kết nối tới Server API.';
+            } else {
+                errorMessage = error.message;
+            }
+            
+            reject(new Error(errorMessage));
         }
     });
 
-    const defaultPosition = updatedPresets['top-mid'];
-    const resetLyrics = this.state.lyrics.map(lyric => ({
-        ...lyric,
-        x: defaultPosition.x,
-        y: defaultPosition.y,
-    }));
-    
-    this.positionPresets = updatedPresets; 
-
-    this.setState({ 
-        previewRatio: newRatio, 
-        lyrics: resetLyrics 
+    // 4. Hiển thị thông báo Toast
+    toast.promise(exportPromise, {
+        loading: 'Đang gửi yêu cầu xuất video đến server...',
+        success: (message) => <b>{message}</b>,
+        error: (err) => <b>Lỗi gửi yêu cầu: {err.message}</b>,
     });
   };
 
+  // ====================================================================
+  // ⬆️ HÀM XỬ LÝ UPLOAD - LƯU FILE OBJECT
+  // ====================================================================
+
+  handleAudioUpload = (e) => {
+    const file = e.target.files[0];
+    if (file && this.state.wavesurfer) {
+      this.state.wavesurfer.load(URL.createObjectURL(file));
+      this.setState({ 
+          isPlaying: false, 
+          audioFileName: file.name,
+          audioFileObject: file, 
+          isExporting: false,    
+          exportedFileName: null,
+      }); 
+      if (this.videoRef.current) {
+        this.videoRef.current.load();
+      }
+      toast.success(`Đã tải Audio thành công! Tên file: ${file.name}`);
+    }
+  };
+
+  handleVideoUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+        this.setState({ 
+            videoFile: URL.createObjectURL(file), 
+            imageFile: null,
+            backgroundFileObject: file, 
+            isExporting: false,
+            exportedFileName: null,
+        });
+        toast.success("Đã tải Video thành công!");
+    }
+  };
+
+  handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+        this.setState({ 
+            imageFile: URL.createObjectURL(file), 
+            videoFile: null,
+            backgroundFileObject: file, 
+            isExporting: false,
+            exportedFileName: null,
+        });
+        toast.success("Đã tải Image thành công!");
+    }
+  };
+  
+  // ====================================================================
+  // LIFE CYCLE VÀ CÁC HÀM PHỤ TRỢ KHÁC
+  // ====================================================================
+
   componentDidMount() {
+    // 🌟 FIX LỖI CONTAINER NOT FOUND: Kiểm tra ref trước khi khởi tạo
+    if (!this.waveformRef.current) {
+        console.error("WaveSurfer container không tìm thấy!");
+        return; 
+    }
+    
     const wavesurfer = WaveSurfer.create({
         container: this.waveformRef.current,
         waveColor: "lightgray",
@@ -468,7 +563,15 @@ class AudioEditor extends Component {
     });
   }
 
-  // ... (hàm togglePlay, addLyric, handleKeyPress, changeAnimation, handleDragStop, handleDeleteLyric, startEditing, saveEditing, cancelEditing, handleGlobalFontChange, handleGlobalSizeChange giữ nguyên)
+  componentWillUnmount() {
+    // DỌN DẸP INTERVAL KHI UNMOUNT
+    if (this.state.wavesurfer) {
+        this.state.wavesurfer.destroy();
+    }
+    if (this.state.pollingIntervalId) {
+        clearInterval(this.state.pollingIntervalId);
+    }
+  }
 
   togglePlay = () => {
     const { wavesurfer, isPlaying } = this.state;
@@ -573,7 +676,7 @@ class AudioEditor extends Component {
                 >
                     Xóa
                 </button>
-                <button onClick={() => toast.dismiss(t.id)} style={{ backgroundColor: '#5bc0de', color: 'white', border: 'none', padding: '5px 10px' }}>
+                <button onClick={() => toast.dismiss(t.id)} style={{ backgroundColor: '#f0ad4e', color: 'white', border: 'none', padding: '5px 10px' }}>
                     Hủy
                 </button>
             </div>
@@ -629,7 +732,6 @@ class AudioEditor extends Component {
     });
   };
   
-  // Xử lý Global Font Family
   handleGlobalFontChange = (e) => {
     const newFont = e.target.value;
     const updatedLyrics = this.state.lyrics.map(lyric => ({
@@ -643,7 +745,6 @@ class AudioEditor extends Component {
     toast("Đã đổi Font chữ chung cho toàn bộ lyrics!", { icon: '✒️' });
   };
   
-  // Xử lý Global Font Size
   handleGlobalSizeChange = (e) => {
     const newSize = parseInt(e.target.value);
     if (!isNaN(newSize) && newSize > 0) {
@@ -659,14 +760,10 @@ class AudioEditor extends Component {
     }
   };
   
-  // ... (hàm getAnimationVariants, renderLyricText giữ nguyên)
-
   getAnimationVariants = (animType) => {
-    // Giữ nguyên tốc độ siêu nhanh (xuất hiện trong ~1s)
     const stagger = 0.01;  
     const duration = 0.05; 
     
-    // Giữ nguyên tốc độ biến mất
     const exitDuration = 0.4; 
     const defaultExit = { opacity: 0, y: 5, transition: { duration: exitDuration } }; 
 
@@ -766,9 +863,6 @@ class AudioEditor extends Component {
         ...textStyle,
     };
     
-    // -----------------------------------------------------
-    // 1. CHẾ ĐỘ CĂN LỀ TRÁI/PHẢI (X ≠ 0) -> Cho phép xuống dòng thủ công \n
-    // -----------------------------------------------------
     if (isWordWrap) {
         const parts = text.split('\n');
         
@@ -794,9 +888,6 @@ class AudioEditor extends Component {
         );
     }
 
-    // -----------------------------------------------------
-    // 2. CHẾ ĐỘ CĂN GIỮA (X = 0) -> Ưu tiên animation KÝ TỰ, LOẠI BỎ \n
-    // -----------------------------------------------------
     const textWithoutNewLines = text.replace(/\n/g, ' '); 
 
     const words = textWithoutNewLines.split(/(\s+)/).filter(w => w.length > 0); 
@@ -840,12 +931,55 @@ class AudioEditor extends Component {
         </motion.div>
     );
   }
-// ====================================================================
+  
+  applyPresetPosition = (index, presetKey) => {
+    const preset = this.positionPresets[presetKey] || this.positionPresets['default'];
+    const lyrics = [...this.state.lyrics];
+    
+    const currentResolution = this.resolutionPresets[this.state.previewRatio];
+    let newX = preset.x;
+    if (presetKey.includes('right')) {
+        newX = currentResolution.width - 20; 
+    }
+    
+    lyrics[index].x = newX;
+    lyrics[index].y = preset.y;
+    this.setState({ lyrics });
+  };
+  
+  handleRatioChange = (e) => {
+    const newRatio = e.target.value;
+    const currentResolution = this.resolutionPresets[newRatio];
+    
+    const updatedPresets = { ...this.positionPresets };
+    Object.keys(updatedPresets).forEach(key => {
+        if (key.includes('right')) {
+            updatedPresets[key].x = currentResolution.width - 20;
+        }
+    });
 
+    const defaultPosition = updatedPresets['top-mid'];
+    const resetLyrics = this.state.lyrics.map(lyric => ({
+        ...lyric,
+        x: defaultPosition.x,
+        y: defaultPosition.y,
+    }));
+    
+    this.positionPresets = updatedPresets; 
+
+    this.setState({ 
+        previewRatio: newRatio, 
+        lyrics: resetLyrics 
+    });
+  };
+
+  // ====================================================================
+  // 🎨 RENDER
+  // ====================================================================
 
   render() {
-    const { lyrics, currentLyric, currentTime, videoFile, imageFile, isPlaying, editingIndex, editingText, editingTime, editingFontSize, editingFontFamily, globalFontFamily, globalFontSize, previewRatio, audioFileName } = this.state;
-
+    const { lyrics, currentLyric, currentTime, videoFile, imageFile, isPlaying, editingIndex, editingText, editingTime, editingFontSize, editingFontFamily, globalFontFamily, globalFontSize, previewRatio, audioFileName, audioFileObject, backgroundFileObject, isExporting, exportedFileName } = this.state;
+    
     const animationOptions = [
       { value: "fade-in-basic", label: "Fade In (Cơ bản)" }, 
       { value: "throw-out", label: "Throw Out (Ký tự)" }, 
@@ -864,32 +998,26 @@ class AudioEditor extends Component {
         "Roboto",
         "Sans-serif"
     ];
-    
+
     const currentResolution = this.resolutionPresets[previewRatio] || this.resolutionPresets['16:9'];
     const previewWidth = `${currentResolution.width}px`;
     const previewHeight = `${currentResolution.height}px`;
     
-    const wrapWidth = Math.round(currentResolution.width * 0.95); 
-    
-    // Kiểm tra để hiển thị thông báo nền
-    let backgroundInfo = "Nền Đen Mặc Định";
-    if (videoFile) {
-        backgroundInfo = "Video Đã Tải";
-    } else if (imageFile) {
-        backgroundInfo = "Ảnh Đã Tải";
-    }
-
+    const backgroundInfo = backgroundFileObject 
+        ? (backgroundFileObject.type.startsWith('video') ? "Video Đã Tải" : "Ảnh Đã Tải") 
+        : "Nền Đen Mặc Định";
+        
+    const DOWNLOAD_URL = `http://localhost:8888/api/download-video/${exportedFileName}`; 
 
     return (
       <div style={{ padding: "20px", fontFamily: "Arial" }}>
-        {/* Toast nằm ở vị trí top-right */}
         <Toaster position="top-right" reverseOrder={false} /> 
         
-        <h2>🎵 Video Lyric Editor</h2>
+        <h2>🎵 Video Lyric Editor by EmSad</h2>
         <hr/>
 
         {/* Upload File */}
-        <div style={{ marginBottom: "10px", display: 'flex', gap: '15px' }}>
+        <div style={{ marginBottom: "10px", display: "flex", gap: "15px" }}>
           <label>Audio: <input type="file" accept="audio/*" onChange={this.handleAudioUpload} /></label>
           <label>Video: <input type="file" accept="video/*" onChange={this.handleVideoUpload} /></label>
           <label>Image: <input type="file" accept="image/*" onChange={this.handleImageUpload} /></label>
@@ -1016,20 +1144,52 @@ class AudioEditor extends Component {
             
             <hr style={{ margin: '10px 0', borderTop: '1px solid #c9302c' }} />
             
-            {/* EXPORT VIDEO */}
+            {/* 🌟 PHẦN EXPORT VIDEO VÀ POLLING STATUS */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '20px', paddingTop: '10px' }}>
                 <b style={{ minWidth: '160px', color: '#c9302c' }}>🎬 Export Video:</b>
                 
-                <button 
-                    onClick={this.handleExportVideo} 
-                    style={{ padding: '10px 20px', backgroundColor: '#c9302c', color: 'white', border: 'none', fontWeight: 'bold' }}
-                    disabled={!this.state.wavesurfer || this.state.lyrics.length === 0}
-                    title={!this.state.wavesurfer ? "Vui lòng tải Audio để xuất video" : (this.state.lyrics.length === 0 ? "Vui lòng thêm lyrics để xuất video" : "")}
-                >
-                    ⚡️ EXPORT VIDEO (.mp4)
-                </button>
+                {isExporting ? (
+                    // TRẠNG THÁI ĐANG XỬ LÝ (POLLING)
+                    <button 
+                        style={{ padding: '10px 20px', backgroundColor: '#ffc107', color: 'black', border: 'none', fontWeight: 'bold', cursor: 'wait' }}
+                        disabled={true}
+                    >
+                        ⏳ Đang xử lý Job: {exportedFileName ? 'Kiểm tra trạng thái...' : 'Gửi Job...'}
+                    </button>
+                ) : exportedFileName ? (
+                    // TRẠNG THÁI XỬ LÝ XONG -> NÚT DOWNLOAD
+                    <a 
+                        href={DOWNLOAD_URL}
+                        download={exportedFileName}
+                        style={{ 
+                            padding: '10px 20px', 
+                            backgroundColor: '#0275d8', 
+                            color: 'white', 
+                            border: 'none', 
+                            fontWeight: 'bold', 
+                            textDecoration: 'none'
+                        }}
+                        onClick={() => {
+                            toast.success(`Đang tải file ${exportedFileName}...`);
+                        }}
+                    >
+                        ⬇️ Tải Xuống Video ({exportedFileName})
+                    </a>
+                ) : (
+                    // TRẠNG THÁI CHUẨN BỊ XUẤT (NÚT BÌNH THƯỜNG)
+                    <button 
+                        onClick={this.handleExportVideo} 
+                        style={{ padding: '10px 20px', backgroundColor: '#c9302c', color: 'white', border: 'none', fontWeight: 'bold' }}
+                        disabled={!audioFileObject || this.state.lyrics.length === 0}
+                        title={!audioFileObject ? "Vui lòng tải Audio để xuất video" : (this.state.lyrics.length === 0 ? "Vui lòng thêm lyrics để xuất video" : "")}
+                    >
+                        ⚡️ EXPORT VIDEO (Gửi lên Laravel)
+                    </button>
+                )}
                 
-                <span style={{ fontSize: '12px', color: '#c9302c' }}>**Nền hiện tại:** {backgroundInfo}</span>
+                <span style={{ fontSize: '12px', color: '#c9302c' }}>
+                    **Nền hiện tại:** {backgroundInfo} 
+                </span>
             </div>
         </div>
         <hr/>
@@ -1040,7 +1200,7 @@ class AudioEditor extends Component {
           style={{
             width: previewWidth,
             height: previewHeight,
-            backgroundColor: (videoFile || imageFile) ? "#333" : "#000", // Nền đen nếu không có ảnh/video
+            backgroundColor: (videoFile || imageFile) ? "#333" : "#000", 
             margin: "20px auto", 
             position: "relative", 
             overflow: "hidden", 
@@ -1121,7 +1281,7 @@ class AudioEditor extends Component {
                   cursor: "move",
                   zIndex: editingIndex === index ? 200 : 100, 
                   transform: 'none', 
-                  width: isMid ? '100%' : `${wrapWidth}px`, 
+                  width: isMid ? '100%' : `${currentResolution.width * 0.95}px`, 
                   maxWidth: '100%', 
               };
               
@@ -1135,7 +1295,7 @@ class AudioEditor extends Component {
               let dragX = lyric.x;
 
               if (isWordWrap && isRight) {
-                  dragX = lyric.x - wrapWidth; 
+                  dragX = lyric.x - (currentResolution.width * 0.95); 
               }
 
               return (
@@ -1167,13 +1327,13 @@ class AudioEditor extends Component {
           style={{ width: "80%", margin: "20px auto 0 auto" }} 
         >
             <div 
-              ref={this.waveformRef}
+              ref={this.waveformRef} // Đảm bảo ref được gắn đúng
               style={{ width: "100%", height: "100px" }} 
             ></div>
         </div>
         
         {/* Add lyric */}
-        <div style={{ width: "80%", margin: "20px auto" }}>
+        <div style={{ width: "80%", margin: "30px auto", display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <textarea
             ref={this.currentLyricInputRef} 
             placeholder="Nhập lyric (Dùng Shift+Enter hoặc Ctrl+Enter để xuống dòng thủ công. Enter để thêm)"
